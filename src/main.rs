@@ -1,4 +1,4 @@
-use tutorial6_uniforms::run;
+use wasm_gl::run;
 
 fn main() {
     run().unwrap();
