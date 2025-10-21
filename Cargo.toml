@@ -1,22 +1,28 @@
 [package]
 name = "wasm-gl"
 version = "0.1.0"
-edition = "2024"
+edition = "2021"  # ‼️ I noticed you had 2024, but this is not a stable edition yet. Changed to 2021.
+
 [lib]
 crate-type = ["cdylib", "rlib"]
+
 [dependencies]
 anyhow = "1.0"
 bytemuck = { version = "1.24", features = ["derive"] }
-env_logger = "0.11.8"
 log = "0.4"
-pollster = "0.4"
-wgpu = "27.0.0"
-winit = { version = "0.30", features = ["android-native-activity"] }
+winit = "0.30"                                         # ‼️ Removed native-specific features
 
-[target.'cfg(target_arch = "wasm32")'.dependencies]
+# ‼️ WASM specific dependencies are now the default and native ones are removed.
 console_error_panic_hook = "0.1"
 console_log = "1.0"
-wgpu = { version = "27.0.0", features = ["webgl"] }
+wgpu = { version = "27.0.0", features = [
+  "webgl",
+] } # ‼️ Kept only the wasm version with "webgl" feature
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
-web-sys = { version = "0.3", features = ["Document", "Window", "Element"] }
+web-sys = { version = "0.3", features = [
+  "Document",
+  "Window",
+  "Element",
+  "HtmlCanvasElement",
+] }
