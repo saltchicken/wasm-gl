@@ -70,7 +70,7 @@ impl ApplicationHandler<State> for App {
     fn user_event(&mut self, _event_loop: &ActiveEventLoop, mut event: State) {
         #[cfg(target_arch = "wasm32")]
         {
-            event.window().request_redraw(); // ‼️ CHANGED: from .window to .window()
+            event.window().request_redraw();
         }
         self.state = Some(event);
     }
@@ -87,18 +87,16 @@ impl ApplicationHandler<State> for App {
         match event {
             WindowEvent::CloseRequested => event_loop.exit(),
             WindowEvent::Resized(size) => state.resize(size.width, size.height),
-            WindowEvent::RedrawRequested => {
-                match state.render() {
-                    Ok(_) => {}
-                    Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                        let size = state.window().inner_size(); // ‼️ CHANGED: from .window to .window()
-                        state.resize(size.width, size.height);
-                    }
-                    Err(e) => {
-                        log::error!("Unable to render {}", e);
-                    }
+            WindowEvent::RedrawRequested => match state.render() {
+                Ok(_) => {}
+                Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
+                    let size = state.window().inner_size();
+                    state.resize(size.width, size.height);
                 }
-            }
+                Err(e) => {
+                    log::error!("Unable to render {}", e);
+                }
+            },
             WindowEvent::MouseInput { .. } => {}
             WindowEvent::KeyboardInput {
                 event:
