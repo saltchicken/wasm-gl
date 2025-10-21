@@ -1,6 +1,7 @@
 use std::{iter, sync::Arc};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
+use wgpu::util::DeviceExt;
 use winit::{
     application::ApplicationHandler,
     event::*,
@@ -33,22 +34,22 @@ impl Vertex {
 const VERTICES: &[Vertex] = &[
     Vertex {
         position: [-1.0, -1.0],
-    }, // Triangle 1
-    Vertex {
-        position: [1.0, -1.0],
-    },
-    Vertex {
-        position: [1.0, 1.0],
-    },
-    Vertex {
-        position: [-1.0, -1.0],
-    }, // Triangle 2
-    Vertex {
-        position: [1.0, 1.0],
-    },
+    }, // A
     Vertex {
         position: [-1.0, 1.0],
-    },
+    }, // B
+    Vertex {
+        position: [1.0, 1.0],
+    }, // C
+    Vertex {
+        position: [1.0, -1.0],
+    }, // D
+];
+
+// TODO: Verify that this is the correct winding. Should be CCW.
+const INDICES: &[u16] = &[
+    0, 1, 2, // Triangle 1 (A, B, C)
+    0, 2, 3, // Triangle 2 (A, C, D)
 ];
 
 pub struct State {
@@ -59,7 +60,8 @@ pub struct State {
     is_surface_configured: bool,
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
-    num_vertices: u32,
+    index_buffer: wgpu::Buffer,
+    num_indices: u32,
     window: Arc<Window>,
 }
 
@@ -117,6 +119,11 @@ impl State {
             desired_maximum_frame_latency: 2,
         };
 
+        // TODO: Is this necessary?
+        if size.width > 0 && size.height > 0 {
+            surface.configure(&device, &config);
+        }
+
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
@@ -152,7 +159,8 @@ impl State {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                cull_mode: Some(wgpu::Face::Back),
+                // cull_mode: Some(wgpu::Face::Back),
+                cull_mode: None,
                 polygon_mode: wgpu::PolygonMode::Fill,
                 unclipped_depth: false,
                 conservative: false,
@@ -167,25 +175,31 @@ impl State {
             cache: None,
         });
 
-        let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
-            size: (VERTICES.len() * std::mem::size_of::<Vertex>()) as wgpu::BufferAddress,
-            usage: wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_DST,
-            mapped_at_creation: false,
+            contents: bytemuck::cast_slice(VERTICES),
+            usage: wgpu::BufferUsages::VERTEX,
         });
-        queue.write_buffer(&vertex_buffer, 0, bytemuck::cast_slice(VERTICES));
 
-        let num_vertices = VERTICES.len() as u32;
+        let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Index Buffer"),
+            contents: bytemuck::cast_slice(INDICES),
+            usage: wgpu::BufferUsages::INDEX,
+        });
+
+        let num_indices = INDICES.len() as u32;
 
         Ok(Self {
             surface,
             device,
             queue,
             config,
-            is_surface_configured: false,
+            // is_surface_configured: false,
+            is_surface_configured: size.width > 0 && size.height > 0,
             render_pipeline,
             vertex_buffer,
-            num_vertices,
+            index_buffer,
+            num_indices,
             window,
         })
     }
@@ -231,7 +245,7 @@ impl State {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.0,
+                            r: 1.0,
                             g: 0.5,
                             b: 0.1,
                             a: 1.0,
@@ -247,7 +261,8 @@ impl State {
 
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            render_pass.draw(0..self.num_vertices, 0..1);
+            render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
+            render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
@@ -313,10 +328,6 @@ impl ApplicationHandler<State> for App {
         #[cfg(target_arch = "wasm32")]
         {
             event.window.request_redraw();
-            event.resize(
-                event.window.inner_size().width,
-                event.window.inner_size().height,
-            );
         }
         self.state = Some(event);
     }
