@@ -61,10 +61,8 @@ impl State {
     pub async fn new(window: Arc<Window>) -> anyhow::Result<State> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            #[cfg(not(target_arch = "wasm32"))]
-            backends: wgpu::Backends::PRIMARY,
-            #[cfg(target_arch = "wasm32")]
-            backends: wgpu::Backends::GL,
+            // ‼️ Removed native-only backend
+            backends: wgpu::Backends::GL, // ‼️ This is now the only backend
             ..Default::default()
         });
         let surface = instance.create_surface(window.clone()).unwrap();
@@ -76,21 +74,20 @@ impl State {
             })
             .await
             .unwrap();
+
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
                 required_features: wgpu::Features::empty(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                required_limits: if cfg!(target_arch = "wasm32") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
-                },
+                // ‼️ Removed if/else, only using Wasm limits
+                required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
             })
             .await
             .unwrap();
+
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps
             .formats
@@ -108,14 +105,17 @@ impl State {
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
+
         // TODO: Is this necessary?
         if size.width > 0 && size.height > 0 {
             surface.configure(&device, &config);
         }
+
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
+
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
@@ -160,17 +160,21 @@ impl State {
             multiview: None,
             cache: None,
         });
+
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(VERTICES),
             usage: wgpu::BufferUsages::VERTEX,
         });
+
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
             contents: bytemuck::cast_slice(INDICES),
             usage: wgpu::BufferUsages::INDEX,
         });
+
         let num_indices = INDICES.len() as u32;
+
         Ok(Self {
             surface,
             device,
@@ -185,9 +189,11 @@ impl State {
             window,
         })
     }
+
     pub fn window(&self) -> &Window {
         &self.window
     }
+
     pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
             self.is_surface_configured = true;
@@ -196,11 +202,13 @@ impl State {
             self.surface.configure(&self.device, &self.config);
         }
     }
+
     pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, key: KeyCode, pressed: bool) {
         if key == KeyCode::Escape && pressed {
             event_loop.exit();
         }
     }
+
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         // self.window.request_redraw();
         if !self.is_surface_configured {
@@ -215,6 +223,7 @@ impl State {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
+
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -231,11 +240,13 @@ impl State {
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
+
             render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
+
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
         Ok(())
