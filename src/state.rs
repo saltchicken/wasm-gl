@@ -38,7 +38,6 @@ const VERTICES: &[Vertex] = &[
     }, // D
 ];
 
-// TODO: Verify that this is the correct winding. Should be CCW.
 const INDICES: &[u16] = &[
     0, 1, 2, // Triangle 1 (A, B, C)
     0, 2, 3, // Triangle 2 (A, C, D)
@@ -61,10 +60,7 @@ impl State {
     pub async fn new(window: Arc<Window>) -> anyhow::Result<State> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
-            #[cfg(target_arch = "wasm32")]
-            backends: wgpu::Backends::GL,
             ..Default::default()
         });
         let surface = instance.create_surface(window.clone()).unwrap();
@@ -81,11 +77,7 @@ impl State {
                 label: None,
                 required_features: wgpu::Features::empty(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                required_limits: if cfg!(target_arch = "wasm32") {
-                    wgpu::Limits::downlevel_webgl2_defaults()
-                } else {
-                    wgpu::Limits::default()
-                },
+                required_limits: wgpu::Limits::default(),
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
             })
@@ -108,10 +100,11 @@ impl State {
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
-        // TODO: Is this necessary?
+
         if size.width > 0 && size.height > 0 {
             surface.configure(&device, &config);
         }
+
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
@@ -145,7 +138,6 @@ impl State {
                 topology: wgpu::PrimitiveTopology::TriangleList,
                 strip_index_format: None,
                 front_face: wgpu::FrontFace::Ccw,
-                // cull_mode: Some(wgpu::Face::Back),
                 cull_mode: None,
                 polygon_mode: wgpu::PolygonMode::Fill,
                 unclipped_depth: false,
@@ -176,7 +168,6 @@ impl State {
             device,
             queue,
             config,
-            // is_surface_configured: false,
             is_surface_configured: size.width > 0 && size.height > 0,
             render_pipeline,
             vertex_buffer,
@@ -202,7 +193,6 @@ impl State {
         }
     }
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
-        // self.window.request_redraw();
         if !self.is_surface_configured {
             return Ok(());
         }
