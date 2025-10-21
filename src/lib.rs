@@ -2,7 +2,11 @@ use std::{iter, sync::Arc};
 
 use wgpu::util::DeviceExt;
 use winit::{
-    application::ApplicationHandler, event::*, event_loop::{ActiveEventLoop, EventLoop}, keyboard::{KeyCode, PhysicalKey}, window::Window
+    application::ApplicationHandler,
+    event::*,
+    event_loop::{ActiveEventLoop, EventLoop},
+    keyboard::{KeyCode, PhysicalKey},
+    window::Window,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -41,28 +45,24 @@ impl Vertex {
 
 const VERTICES: &[Vertex] = &[
     Vertex {
-        position: [-0.0868241, 0.49240386, 0.0],
-        tex_coords: [0.4131759, 0.00759614],
+        position: [-1.0, -1.0, 0.0],
+        tex_coords: [0.0, 1.0],
     }, // A
     Vertex {
-        position: [-0.49513406, 0.06958647, 0.0],
-        tex_coords: [0.0048659444, 0.43041354],
+        position: [-1.0, 1.0, 0.0],
+        tex_coords: [0.0, 0.0],
     }, // B
     Vertex {
-        position: [-0.21918549, -0.44939706, 0.0],
-        tex_coords: [0.28081453, 0.949397],
+        position: [1.0, 1.0, 0.0],
+        tex_coords: [1.0, 0.0],
     }, // C
     Vertex {
-        position: [0.35966998, -0.3473291, 0.0],
-        tex_coords: [0.85967, 0.84732914],
+        position: [1.0, -1.0, 0.0],
+        tex_coords: [1.0, 1.0],
     }, // D
-    Vertex {
-        position: [0.44147372, 0.2347359, 0.0],
-        tex_coords: [0.9414737, 0.2652641],
-    }, // E
 ];
 
-const INDICES: &[u16] = &[0, 1, 4, 1, 2, 4, 2, 3, 4, /* padding */ 0];
+const INDICES: &[u16] = &[0, 1, 2, 0, 2, 3];
 
 #[rustfmt::skip]
 pub const OPENGL_TO_WGPU_MATRIX: cgmath::Matrix4<f32> = cgmath::Matrix4::from_cols(
@@ -280,9 +280,9 @@ impl State {
             desired_maximum_frame_latency: 2,
         };
 
-        let diffuse_bytes = include_bytes!("happy-tree.png");
+        let diffuse_bytes = include_bytes!("empty.png");
         let diffuse_texture =
-            texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "happy-tree.png").unwrap();
+            texture::Texture::from_bytes(&device, &queue, diffuse_bytes, "empty.png").unwrap();
 
         let texture_bind_group_layout =
             device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -323,7 +323,8 @@ impl State {
         });
 
         let camera = Camera {
-            eye: (0.0, 1.0, 2.0).into(),
+            eye: (0.0, 0.0, -2.0).into(), //TODO: Why do I have to set z as negative to see the
+            //      front of the texture
             target: (0.0, 0.0, 0.0).into(),
             up: cgmath::Vector3::unit_y(),
             aspect: config.width as f32 / config.height as f32,
@@ -598,13 +599,15 @@ impl ApplicationHandler<State> for App {
         {
             if let Some(proxy) = self.proxy.take() {
                 wasm_bindgen_futures::spawn_local(async move {
-                    assert!(proxy
-                        .send_event(
-                            State::new(window)
-                                .await
-                                .expect("Unable to create canvas!!!")
-                        )
-                        .is_ok())
+                    assert!(
+                        proxy
+                            .send_event(
+                                State::new(window)
+                                    .await
+                                    .expect("Unable to create canvas!!!")
+                            )
+                            .is_ok()
+                    )
                 });
             }
         }
