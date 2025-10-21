@@ -1,5 +1,4 @@
 use std::{iter, sync::Arc};
-// ‼️ use wgpu::util::DeviceExt; // No longer needed for this simple vertex buffer
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 use winit::{
@@ -10,12 +9,10 @@ use winit::{
     window::Window,
 };
 
-// ‼️ mod texture; // Removed
-
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 struct Vertex {
-    position: [f32; 2], // ‼️ Changed from 3D position and tex_coords to just 2D
+    position: [f32; 2],
 }
 
 impl Vertex {
@@ -24,20 +21,15 @@ impl Vertex {
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
             step_mode: wgpu::VertexStepMode::Vertex,
-            attributes: &[
-                wgpu::VertexAttribute {
-                    offset: 0,
-                    shader_location: 0,
-                    format: wgpu::VertexFormat::Float32x2, // ‼️ Changed format
-                },
-                // ‼️ Removed second attribute for tex_coords
-            ],
+            attributes: &[wgpu::VertexAttribute {
+                offset: 0,
+                shader_location: 0,
+                format: wgpu::VertexFormat::Float32x2,
+            }],
         }
     }
 }
 
-// ‼️ Simplified vertices to draw 2 full-screen triangles (a quad)
-// ‼️ No index buffer needed!
 const VERTICES: &[Vertex] = &[
     Vertex {
         position: [-1.0, -1.0],
@@ -59,12 +51,6 @@ const VERTICES: &[Vertex] = &[
     },
 ];
 
-// ‼️ Removed INDICES
-// ‼️ Removed OPENGL_TO_WGPU_MATRIX
-// ‼️ Removed Camera struct
-// ‼️ Removed CameraUniform struct
-// ‼️ Removed CameraController struct
-
 pub struct State {
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
@@ -73,8 +59,7 @@ pub struct State {
     is_surface_configured: bool,
     render_pipeline: wgpu::RenderPipeline,
     vertex_buffer: wgpu::Buffer,
-    num_vertices: u32, // ‼️ Changed from num_indices
-    // ‼️ Removed all texture and camera fields
+    num_vertices: u32,
     window: Arc<Window>,
 }
 
@@ -132,10 +117,6 @@ impl State {
             desired_maximum_frame_latency: 2,
         };
 
-        // ‼️ Removed all texture loading and bind group logic
-
-        // ‼️ Removed all camera and camera bind group logic
-
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
@@ -159,7 +140,7 @@ impl State {
             },
             fragment: Some(wgpu::FragmentState {
                 module: &shader,
-                entry_point: Some("fs_main"), // ‼️ fs_main no longer takes inputs
+                entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
                     format: config.format,
                     blend: Some(wgpu::BlendState::REPLACE),
@@ -186,7 +167,6 @@ impl State {
             cache: None,
         });
 
-        // ‼️ Simplified vertex buffer creation (though create_buffer_init is also fine)
         let vertex_buffer = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("Vertex Buffer"),
             size: (VERTICES.len() * std::mem::size_of::<Vertex>()) as wgpu::BufferAddress,
@@ -195,7 +175,6 @@ impl State {
         });
         queue.write_buffer(&vertex_buffer, 0, bytemuck::cast_slice(VERTICES));
 
-        // ‼️ Removed index buffer
         let num_vertices = VERTICES.len() as u32;
 
         Ok(Self {
@@ -206,8 +185,7 @@ impl State {
             is_surface_configured: false,
             render_pipeline,
             vertex_buffer,
-            num_vertices, // ‼️ Added
-            // ‼️ Removed old fields
+            num_vertices,
             window,
         })
     }
@@ -222,7 +200,6 @@ impl State {
             self.config.width = width;
             self.config.height = height;
             self.surface.configure(&self.device, &self.config);
-            // ‼️ Removed camera aspect ratio update
         }
     }
 
@@ -230,10 +207,7 @@ impl State {
         if key == KeyCode::Escape && pressed {
             event_loop.exit();
         }
-        // ‼️ Removed camera controller input
     }
-
-    // ‼️ fn update(&mut self) // Removed entire function
 
     fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         self.window.request_redraw();
@@ -257,7 +231,6 @@ impl State {
                     resolve_target: None,
                     ops: wgpu::Operations {
                         load: wgpu::LoadOp::Clear(wgpu::Color {
-                            // ‼️ Let's make the background green
                             r: 0.0,
                             g: 0.5,
                             b: 0.1,
@@ -273,10 +246,8 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline);
-            // ‼️ Removed set_bind_group calls
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
-            // ‼️ Removed set_index_buffer
-            render_pass.draw(0..self.num_vertices, 0..1); // ‼️ Changed from draw_indexed
+            render_pass.draw(0..self.num_vertices, 0..1);
         }
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
