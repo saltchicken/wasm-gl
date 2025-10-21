@@ -54,20 +54,26 @@ pub struct State {
     index_buffer: wgpu::Buffer,
     num_indices: u32,
     window: Arc<Window>,
+    start_time_ms: f64, // ‼️ Change to f64 to store browser timestamp
+    time_buffer: wgpu::Buffer,
+    time_bind_group: wgpu::BindGroup,
 }
 
 impl State {
     pub async fn new(window: Arc<Window>) -> anyhow::Result<State> {
-        let size = window.inner_size();
+        let performance = web_sys::window()
+            .expect("no global `window` exists")
+            .performance()
+            .expect("performance should be available");
 
-        // ‼️ Simplified instance descriptor for wasm
+        let start_time_ms = performance.now();
+
+        let size = window.inner_size();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
             backends: wgpu::Backends::GL,
             ..Default::default()
         });
-
         let surface = instance.create_surface(window.clone()).unwrap();
-
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
@@ -76,20 +82,17 @@ impl State {
             })
             .await
             .unwrap();
-
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: None,
                 required_features: wgpu::Features::empty(),
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                // ‼️ Simplified limits for wasm
                 required_limits: wgpu::Limits::downlevel_webgl2_defaults(),
                 memory_hints: Default::default(),
                 trace: wgpu::Trace::Off,
             })
             .await
             .unwrap();
-
         let surface_caps = surface.get_capabilities(&adapter);
         let surface_format = surface_caps
             .formats
@@ -97,7 +100,6 @@ impl State {
             .copied()
             .find(|f| f.is_srgb())
             .unwrap_or(surface_caps.formats[0]);
-
         let config = wgpu::SurfaceConfiguration {
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
             format: surface_format,
@@ -108,23 +110,46 @@ impl State {
             view_formats: vec![],
             desired_maximum_frame_latency: 2,
         };
-
         if size.width > 0 && size.height > 0 {
             surface.configure(&device, &config);
         }
-
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("Shader"),
             source: wgpu::ShaderSource::Wgsl(include_str!("shader.wgsl").into()),
         });
-
+        let time_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Time Buffer"),
+            contents: bytemuck::cast_slice(&[0.0f32; 4]),
+            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+        });
+        let time_bind_group_layout =
+            device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                entries: &[wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: None,
+                    },
+                    count: None,
+                }],
+                label: Some("time_bind_group_layout"),
+            });
+        let time_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            layout: &time_bind_group_layout,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: time_buffer.as_entire_binding(),
+            }],
+            label: Some("time_bind_group"),
+        });
         let render_pipeline_layout =
             device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
                 label: Some("Render Pipeline Layout"),
-                bind_group_layouts: &[],
+                bind_group_layouts: &[&time_bind_group_layout],
                 push_constant_ranges: &[],
             });
-
         let render_pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
             label: Some("Render Pipeline"),
             layout: Some(&render_pipeline_layout),
@@ -162,21 +187,17 @@ impl State {
             multiview: None,
             cache: None,
         });
-
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Vertex Buffer"),
             contents: bytemuck::cast_slice(VERTICES),
             usage: wgpu::BufferUsages::VERTEX,
         });
-
         let index_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("Index Buffer"),
             contents: bytemuck::cast_slice(INDICES),
             usage: wgpu::BufferUsages::INDEX,
         });
-
         let num_indices = INDICES.len() as u32;
-
         Ok(Self {
             surface,
             device,
@@ -188,13 +209,14 @@ impl State {
             index_buffer,
             num_indices,
             window,
+            start_time_ms, // ‼️ Store the new start time
+            time_buffer,
+            time_bind_group,
         })
     }
-
     pub fn window(&self) -> &Window {
         &self.window
     }
-
     pub fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
             self.is_surface_configured = true;
@@ -203,29 +225,36 @@ impl State {
             self.surface.configure(&self.device, &self.config);
         }
     }
-
     pub fn handle_key(&mut self, event_loop: &ActiveEventLoop, key: KeyCode, pressed: bool) {
         if key == KeyCode::Escape && pressed {
             event_loop.exit();
         }
     }
-
     pub fn render(&mut self) -> Result<(), wgpu::SurfaceError> {
         if !self.is_surface_configured {
             return Ok(());
         }
+        // ‼️ Get current time from browser performance API
+        let performance = web_sys::window()
+            .expect("no global `window` exists")
+            .performance()
+            .expect("performance should be available");
+        let now_ms = performance.now();
+        let elapsed_s = (now_ms - self.start_time_ms) as f32 / 1000.0;
+
+        let time_data = [elapsed_s, 0.0, 0.0, 0.0];
+        self.queue
+            .write_buffer(&self.time_buffer, 0, bytemuck::cast_slice(&time_data));
 
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
-
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("Render Encoder"),
             });
-
         {
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
@@ -242,16 +271,14 @@ impl State {
                 occlusion_query_set: None,
                 timestamp_writes: None,
             });
-
             render_pass.set_pipeline(&self.render_pipeline);
+            render_pass.set_bind_group(0, &self.time_bind_group, &[]);
             render_pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
             render_pass.set_index_buffer(self.index_buffer.slice(..), wgpu::IndexFormat::Uint16);
             render_pass.draw_indexed(0..self.num_indices, 0, 0..1);
         }
-
         self.queue.submit(iter::once(encoder.finish()));
         output.present();
-
         Ok(())
     }
 }
