@@ -1,4 +1,3 @@
-// ‼️ This is a new file: src/state.rs
 use std::{iter, sync::Arc};
 use wgpu::util::DeviceExt;
 use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
@@ -6,13 +5,11 @@ use winit::{event_loop::ActiveEventLoop, keyboard::KeyCode, window::Window};
 #[repr(C)]
 #[derive(Copy, Clone, Debug, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Vertex {
-    // ‼️ Made pub
     position: [f32; 2],
 }
 
 impl Vertex {
     pub fn desc() -> wgpu::VertexBufferLayout<'static> {
-        // ‼️ Made pub
         use std::mem;
         wgpu::VertexBufferLayout {
             array_stride: mem::size_of::<Vertex>() as wgpu::BufferAddress,
@@ -48,7 +45,6 @@ const INDICES: &[u16] = &[
 ];
 
 pub struct State {
-    // ‼️ Made pub
     surface: wgpu::Surface<'static>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -62,8 +58,6 @@ pub struct State {
 }
 
 impl State {
-    // ‼️ Made pub
-    // ‼️ All methods used by lib.rs are made pub
     pub async fn new(window: Arc<Window>) -> anyhow::Result<State> {
         let size = window.inner_size();
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor {
@@ -134,7 +128,7 @@ impl State {
             vertex: wgpu::VertexState {
                 module: &shader,
                 entry_point: Some("vs_main"),
-                buffers: &[Vertex::desc()], // ‼️ Uses pub Vertex::desc
+                buffers: &[Vertex::desc()],
                 compilation_options: Default::default(),
             },
             fragment: Some(wgpu::FragmentState {
